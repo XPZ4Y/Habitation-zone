@@ -1,0 +1,444 @@
+<html>
+<head>
+	<meta name="viewport" content="width=device.width, initial-scale=1.0">
+	<title>Habitation zone</title>
+	<script src="THREE.js"></script>
+	<script src="orbit.js"></script>
+	<script>
+	    
+	</script>
+	<style>
+		body {
+			margin: 0;
+			overflow: hidden;
+		}
+		canvas {
+			display: block;
+  			image-rendering: pixelated;
+		}
+		.msg {
+			position: fixed;
+			right: 0px;
+			top: 0px;
+			font-size: x-large;
+			color: white;
+			width: 300px;
+			height: 200px;
+			font-family: system-ui;
+		}
+		.cmoney {
+			position: fixed;
+			left: 0px;
+			top: 0px;
+			font-size: x-large;
+			color: white;
+			width: 300px;
+			height: 200px;
+			font-family: system-ui;
+		}
+	</style>
+
+</head>
+<body>
+	<div class='msg' id='message'></div>
+	<div class='cmoney' id='money'>0 U</div>
+	<script>
+
+
+		//initiase world
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color(0x1A1A3C); //white bg
+		const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+		camera.position.set(2,2,5)
+		const ambientLight = new THREE.AmbientLight(0xffffff, 11);
+		const directionalLight = new THREE.DirectionalLight(0xffffff, 0.1);
+		directionalLight.position.set(0,10, 0);
+
+		//set up renderer
+		const renderer = new THREE.WebGLRenderer({antialias: true, precision: 'highp'});
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		document.body.appendChild(renderer.domElement);
+
+		//initiate camera controls
+		const controls = new THREE.OrbitControls(camera, renderer.domElement);
+		controls.maxPolarAngle=Math.PI/3
+		controls.maxDistance=10
+		controls.minPolarAngle=Math.PI/3.5
+		controls.minAzimuthAngle = 0; // left limit (-45°)
+		controls.maxAzimuthAngle =  Math.PI / 4; // right limit (+45°)
+		
+		const textureLoader = new THREE.TextureLoader();//texture related
+
+		const texture = textureLoader.load('abc.png', function(tex){
+			tex.magFilter = THREE.NearestFilter;
+			tex.minFilter = THREE.NearestFilter;
+			tex.generateMipmaps = false;
+			tex.anisotropy = 1;})
+		texture.wrapS = THREE.ClampToEdgeWrapping;
+		texture.wrapT = THREE.ClampToEdgeWrapping;
+
+		const unclaimedgrass = textureLoader.load('Unclaimed.png', function(tex){
+			tex.magFilter = THREE.NearestFilter;
+			tex.minFilter = THREE.NearestFilter;
+			tex.generateMipmaps = false;
+			tex.anisotropy = 1;})
+		unclaimedgrass.wrapS = THREE.ClampToEdgeWrapping;
+		unclaimedgrass.wrapT = THREE.ClampToEdgeWrapping;
+
+		const sea = textureLoader.load('sea.png', function(tex){
+			tex.magFilter = THREE.NearestFilter;
+			tex.minFilter = THREE.NearestFilter;
+			tex.generateMipmaps = false;
+			tex.anisotropy = 1;})
+		sea.wrapS = THREE.ClampToEdgeWrapping;
+		sea.wrapT = THREE.ClampToEdgeWrapping;
+
+		
+		const faceMappings = [
+		new THREE.Vector2(0, .5), new THREE.Vector2(0, 0), new THREE.Vector2(.5, 0), new THREE.Vector2(.5, .5),//FACE
+		new THREE.Vector2(0, .5), new THREE.Vector2(0, 0), new THREE.Vector2(.5, 0), new THREE.Vector2(.5, .5),//FACE
+		new THREE.Vector2(0, 0.5), new THREE.Vector2(0.5, 0.5), new THREE.Vector2(0.5,1), new THREE.Vector2(0, 1),//TOP
+		new THREE.Vector2(0.5, .5), new THREE.Vector2(.5, 1), new THREE.Vector2(1,1), new THREE.Vector2(1, .5),//BOTTOM
+		new THREE.Vector2(0, .5), new THREE.Vector2(0, 0), new THREE.Vector2(.5, 0), new THREE.Vector2(.5, .5),//FACE
+		new THREE.Vector2(0, .5), new THREE.Vector2(0, 0), new THREE.Vector2(.5, 0), new THREE.Vector2(.5, .5),//FACE
+		]//RIGHT
+		kazlabz = `
+			varying vec2 vUv;
+			varying vec3 vWorldPosition;
+
+			void main() {
+			  vUv = uv;
+			  vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+			  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+			}`
+		haoyuan = `
+			varying vec2 vUv;
+			varying vec3 vWorldPosition;
+
+			uniform sampler2D textureMap;
+			uniform vec3 fireflyPos;
+			uniform vec3 lightColor;
+			uniform float ambientStrength;
+			uniform float falloff;
+
+			void main() {
+			  vec4 texColor = texture2D(textureMap, vUv);
+
+			  // Distance-based falloff
+			  float dist = distance(vWorldPosition, fireflyPos);
+			  float attenuation = 0.9 / (dist * dist / falloff + 0.9);
+
+			  // Final light: ambient + firefly
+			  vec3 litColor = texColor.rgb * (ambientStrength + attenuation) * lightColor;
+
+			  // Optional: Clamp for safety
+			  litColor = clamp(litColor, 0.0, 1.0);
+
+			  gl_FragColor = vec4(litColor, texColor.a);
+			}
+			`
+		const shaderMaterial = new THREE.ShaderMaterial({
+		    uniforms: {
+		        textureMap: { value: texture },
+		        lightColor: { value: new THREE.Color(2,2,2) }, // Warm light effect
+		        fireflyPos: { value: new THREE.Vector3() },
+		        ambientStrength: { value: 0.1 },
+		    	falloff: { value: 3.0 }
+		    },
+		    vertexShader: kazlabz,
+		  	fragmentShader: haoyuan
+		});
+		const unclaimedgrassmaterial = new THREE.ShaderMaterial({
+		    uniforms: {
+		        textureMap: { value: unclaimedgrass },
+		        lightColor: { value: new THREE.Color(1,1,1) }, // Warm light effect
+		        fireflyPos: { value: new THREE.Vector3() },
+		        ambientStrength: { value: 0.1 },
+		    	falloff: { value: 3.0 }
+		    },
+		    vertexShader: kazlabz,
+		  	fragmentShader: haoyuan
+		});
+
+		
+		const seamaterial = new THREE.ShaderMaterial({
+		  vertexShader: kazlabz,
+		  fragmentShader: haoyuan,
+		  uniforms: {
+		    textureMap: { value: sea },
+		    fireflyPos: { value: new THREE.Vector3() },
+		    lightColor: { value: new THREE.Color(1.1, 1.1, 1.1) }, // warm light
+		    ambientStrength: { value: 0.1 },
+		    falloff: { value: 3.0 },
+		  }
+		});
+		
+
+		 
+		
+
+		
+		const blocky=createNormalBlockData()//a general texture map for all normal blocks
+
+		function animate(){
+			setTimeout(()=>{requestAnimationFrame(animate)}, tpf)
+			controls.update()
+			updateMovementVector();
+			raycaster.setFromCamera(mouse, camera);
+			const intersects = raycaster.intersectObjects(entities);
+
+			hoveredCube = intersects.length > 0 ? intersects[0].object : null;
+			if(hoveredCube && highlighted[0]==hoveredCube){
+			}else if(hoveredCube && highlighted[0]!==hoveredCube){
+				
+				highlighted[0] ? highlighted[0].position.y = 0 : null
+				//nonhighlighted.push
+				
+				highlighted[0]=hoveredCube
+
+				highlighted[0].position.y=0.2
+				
+			}else{
+			}
+
+			if(highlighted[0]){
+				seamaterial.uniforms.fireflyPos.value.copy({x:highlighted[0].position.x, y:(highlighted[0].position.y-2), z:highlighted[0].position.z})
+				unclaimedgrassmaterial.uniforms.fireflyPos.value.copy({x:highlighted[0].position.x, y:(highlighted[0].position.y-2), z:highlighted[0].position.z})
+				shaderMaterial.uniforms.fireflyPos.value.copy({x:highlighted[0].position.x, y:(highlighted[0].position.y-2), z:highlighted[0].position.z})
+
+
+				if(highlighted[0].userData && highlighted[0].userData.des){
+					messageBox.textContent = highlighted[0].userData.des
+				}
+			}
+			
+			accountHum()
+
+
+			moveCamera(movementVector.x, movementVector.y)
+			/*for (const cube of nonhighlighted) {
+			  const data = cube.userData;
+
+			  // Set targetY based on hover
+			  if (cube === hoveredCube) {
+			    data.hovered = true;
+			    data.targetY = data.baseY + 0.2;
+			  } else {
+			    data.hovered = false;
+			    data.targetY = data.baseY;
+			  }
+
+			  // Smoothly interpolate y-position
+			  const deltaY = data.targetY - cube.position.y;
+			  cube.position.y += deltaY * data.speed;
+			}*/
+
+
+
+
+			renderer.render(scene,camera);
+		}
+
+		function createNormalBlockData(){
+			let blockBasis = []
+			for(let i=0; i<6; i++){
+					const [a, b, c, d] = faceMappings.slice(i*4, (i*4)+4);
+					blockBasis.push( [a, b, d],[b, c, d] );
+			}
+			return blockBasis
+		}
+		function playSound(src) {
+		  const audio = new Audio(src);
+		  audio.play().catch(err => {
+		    // Optional: handle autoplay restrictions
+		    console.error("Audio play failed:", err);
+		  });
+		}
+		function moveCamera(dx, dz) {
+		  const movement = new THREE.Vector3(dx, 0, dz).multiplyScalar(0.2); // adjust speed
+
+			//messageBox.textContent=`${camera.position.x}, ${camera.position.z}`
+		  camera.position.add(movement);
+		  controls.target.add(movement); // keep orbit focus centered
+
+		  controls.update();
+		}
+		//the mother function of the tiles
+		function autumn_grass(x, y, z){
+			const geometry = new THREE.BoxGeometry(1,1,1);
+			geometry.faceVertexUvs[0] = blocky
+			geometry.uvsNeedUpdate = true;
+			const cube = new THREE.Mesh(geometry, shaderMaterial);
+			cube.userData = {
+			  x:x,
+			  z:z,
+			  des: 'Claimed, undeveloped tiles. Build infrastructure, defence, supply lines. Upgrade?'
+			};
+			cube.position.set(x,y,z)
+			cube.oid = 'z'
+			entities.push(cube)
+			scene.add(cube);//add cbes to the scene
+			return cube
+		}
+		function unclaimed_grass(x, y, z){
+			const geometry = new THREE.BoxGeometry(1,1,1);
+			geometry.faceVertexUvs[0] = blocky
+			geometry.uvsNeedUpdate = true;
+			const cube = new THREE.Mesh(geometry, unclaimedgrassmaterial);
+			cube.userData = {
+			  x:x,
+			  z:z,
+			  des: 'These lands lie \n untamed. Press [Q] to claim (100 C)'
+			};
+			cube.position.set(x,y,z)
+			cube.oid = 'a'
+			entities.push(cube)
+			scene.add(cube);//add cbes to the scene
+			return cube
+		}
+		function vast_sea(x, y, z){
+			const geometry = new THREE.BoxGeometry(1,0.6,1);
+			geometry.faceVertexUvs[0] = blocky
+			geometry.uvsNeedUpdate = true;
+			const cube = new THREE.Mesh(geometry, seamaterial);
+			cube.userData = {
+			  x:x,
+			  z:z,
+			  des: 'The oceans.. martime trade, navy, and maybe artificial islands'
+			};
+			cube.position.set(x,y,z)
+			cube.oid = 'o'
+			entities.push(cube)
+			scene.add(cube);//add cbes to the scene
+			return cube
+		}
+		let reagents = [vast_sea,unclaimed_grass,autumn_grass ]
+		function tileReadRender(tilesheet){
+			for(let a=0; a<tilesheet.length; a++){
+				for(let b=0; b<tilesheet[0].length; b++){
+					console.log(tilesheet[b][a])
+					reagents[tilesheet[a][b]](b, 0, a)
+					
+				}
+			}
+		}
+		function removeBlock(block) {
+		  scene.remove(block);
+		  block.geometry.dispose();
+		  if (Array.isArray(block.material)) {
+		    block.material.forEach(mat => mat.dispose());
+		  } else {
+		    block.material.dispose();
+		  }
+		  const i = entities.indexOf(block);
+		  if (i > -1) entities.splice(i, 1);
+		}
+		function updateMovementVector() {
+		  movementVector.set(0, 0);
+		  if (keyState.w) movementVector.y -= 1;
+		  if (keyState.s) movementVector.y += 1;
+		  if (keyState.a) movementVector.x -= 1;
+		  if (keyState.d) movementVector.x += 1;
+
+		  // Optional: normalize for diagonal movement consistency
+		  if (movementVector.length() > 0) movementVector.normalize();
+		}
+		function onMouseMove(event) {
+		  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+		  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+		}
+		function tallyRevenue(account){
+			let rev=0
+			if(account.tiles){
+				for(let a=0; a<account.tiles.length; a++){
+					rev+=account.tiles[a].revenue
+				}
+				return rev
+			}else{
+				console.error("No Tiles property in the given account")
+			}
+		}
+		function newTileLedger(ID, revenue=0){//to be edited in the future
+			return {ID: ID, revenue: revenue}
+		}
+		function accountHum(){//custom function
+			timer+=tpf
+			if(timer % 1000 == 0){
+				account.money+=account.revenue
+				account.money-=account.tiles.length * landMaintainenceCost
+				money.textContent = account.money+' U'
+			}
+			
+		}
+
+		const movementVector = new THREE.Vector2();
+		//entity raycaster ahead, status: prototype
+		const raycaster = new THREE.Raycaster();
+		const mouse = new THREE.Vector2();
+		let hoveredCube = null;
+		
+		function xcc(event){//customized function
+			if(account.money>=landCost && event.key.toLowerCase()=='q' && highlighted[0] && highlighted[0].oid[0]=='a'){
+				account.money-=landCost;//you have to pay to gain uninhabited land
+				account.tiles.push(newTileLedger('z44', 20))
+
+				account.revenue = tallyRevenue(account)
+
+
+				playSound('buy.mp3')
+				let coords = [highlighted[0].userData.x, highlighted[0].userData.z]
+				Mytiler[coords[0]][coords[1]]=0
+				removeBlock(highlighted[0])
+				let e = autumn_grass(coords[0],0, coords[1])
+				e.oid = 'z44'//legal purchase
+			}
+		}//handles upgrades, reclaimation of land
+		window.addEventListener('keydown', (e) => {
+		  if (e.key in keyState) keyState[e.key] = true;
+		});
+		window.addEventListener('keyup', (e) => {
+		  if (e.key in keyState) keyState[e.key] = false;
+		});
+		window.addEventListener('mousemove', onMouseMove, false);
+		window.addEventListener('keyup', xcc)
+
+		
+
+
+		let messageBox = document.getElementById('message')
+		let money = document.getElementById('money')
+
+		let tpf = 100;//time per frame
+		let timer = 0;//count the time
+		let entities = []
+		let highlighted = []
+		let nonhighlighted =[]
+		const landCost = 100;
+		let landMaintainenceCost = 10;
+
+		const keyState = {
+		  w: false,
+		  a: false,
+		  s: false,
+		  d: false
+		};
+		//map -->
+		let Mytiler = [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+
+
+		const account = {//dummy account
+			money: 100,
+			level: 1,
+			moneyRate: 10,
+			tiles: [],
+			revenue: 10
+		}
+
+		tileReadRender(Mytiler)
+		animate()
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+	</script>
+</body>
+

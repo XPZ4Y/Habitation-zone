@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dark World Game</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            background: white;
+            width: 100vw;
+            height: 100vh;
+        }
+        .builder-kit {
+            position: fixed;
+            top: 0;
+            right: -300px;
+            width: 300px;
+            height: 100%;
+            background-color: rgba(10, 14, 20, 0.9);
+            border-right: 2px solid #ffffff;
+            box-shadow: 0 0 20px #ffffff;
+            overflow-y: auto;
+            padding: 10px;
+            transition: right 0.5s;
+        }
+        .builder-kit:hover {
+            right: 0;
+        }
+        
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div class="builder-kit" id="builderbox">
+        
+        <button id="downloadBtn" style="height: 100px; display:block; margin: 5px; border: 2px solid white; width: 100px;">Download</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        
+
+        let gridSize = 20;
+        let gridWidth = 30;
+        let gridHeight = 30;
+        let isDrawing = false;
+        let isErasing = false;
+        let brushState = '0, 0'
+        let pixelArt = {};
+        ssheet={}
+        ssheet.dimensions=[400, 700]
+        const TILES = new Image();
+        TILES.src = 'Assets/TILES.png'; // Replace with your image path
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawGrid();
+        }
+        function switchBlock(stringCoords){
+            brushState=stringCoords
+        }
+
+        window.addEventListener("resize", resizeCanvas);
+        resizeCanvas();
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "gray";
+            ctx.lineWidth = 0.5;
+            for (let x = 0; x < gridWidth * gridSize; x += gridSize) {
+                for (let y = 0; y < gridHeight * gridSize; y += gridSize) {
+                    ctx.strokeRect(y, x, gridSize, gridSize);
+                    if(!pixelArt[`${y/gridSize},${x/gridSize}`]){pixelArt[`${y/gridSize},${x/gridSize}`]='0,0'}
+                    
+                }
+            }
+            drawPixels();
+        }
+        function drawTile(tilesheet, tiledata, config={height:20, width:20, extendX:100, extendY:100}){
+                a=0
+                ctx.drawImage(
+                    tilesheet, 
+                    tiledata[a][2]*config.extendX, 
+                    tiledata[a][3]*config.extendY, 
+                    config.extendX, 
+                    config.extendY, 
+                    tiledata[a][0]*config.width, 
+                    tiledata[a][1]*config.height, 
+                    config.width, 
+                    config.height);
+                //console.log('e')
+            
+        }//please touch the config at a later date
+
+        function drawPixels() {
+            for (let key in pixelArt) {
+                let [x, y] = key.split(",").map(Number);
+                let [e, f] = pixelArt[key].split(", ").map(Number)
+                drawTile(TILES, [[x, y, e, f]])
+            }
+        }
+
+        function getGridPosition(x, y) {
+            let gx = Math.floor(x / gridSize);
+            let gy = Math.floor(y / gridSize);
+            if (gx >= 0 && gx < gridWidth && gy >= 0 && gy < gridHeight) {
+                return [gx, gy];
+            }
+            return null;
+        }
+        function spawnImageButtons(imageSrc, parts, buttonSize = 50) {
+            const container = document.getElementById("builderbox");
+            container.style.display = "block"; // Arrange buttons horizontally
+
+            parts.forEach(([x, y, width, height]) => {
+                const btn = document.createElement("button");
+                btn.style.width = `${buttonSize}px`;
+                btn.style.height = `${buttonSize}px`;
+                btn.style.backgroundImage = `url('${imageSrc}')`;
+                btn.style.backgroundSize = `${ssheet.dimensions[0]/2}px ${ssheet.dimensions[1]/2}px`; // Adjust according to your full image size
+                btn.style.backgroundPosition = `-${x/2}px -${y/2}px`;
+                btn.style.border = "2px solid white";
+                btn.style.cursor = "pointer";
+                btn.style.margin = "5px";
+
+                // Click event (Customize action)
+                btn.addEventListener("click", () => switchBlock(`${x/100}, ${y/100}`));
+
+                container.appendChild(btn);
+            });
+        }
+        spawnImageButtons('Assets/TILES.png', mapTile(100, 100, ssheet.dimensions[0], ssheet.dimensions[1]));
+
+
+        function mapTile(extendX, extendY, width, height){
+            let map = []
+            for(let a=0; a<width; a+=extendX){
+                for(let b=0; b<height; b+=extendY){
+                    map.push([a, b, extendX, extendY])
+                }
+            }
+            return map;
+        }
+
+        //event listener plugins
+        canvas.addEventListener("mousedown", (event) => {
+            let pos = getGridPosition(event.clientX, event.clientY);
+            if (!pos) return;
+            
+            if (event.button === 2) {
+                isErasing = true;
+            } else {
+                isDrawing = true;
+            }
+            
+            let [gx, gy] = pos;
+            if (isErasing) {
+                pixelArt[`${gx},${gy}`]='0,0';
+            } else {
+                pixelArt[`${gx},${gy}`] = brushState;
+            }
+            drawGrid();
+        });
+
+        canvas.addEventListener("mousemove", (event) => {
+            if (isDrawing || isErasing) {
+                let pos = getGridPosition(event.clientX, event.clientY);
+                if (!pos) return;
+                
+                let [gx, gy] = pos;
+                if (isErasing) {
+                    pixelArt[`${gx},${gy}`]='0,0';;
+                } else {
+                    pixelArt[`${gx},${gy}`] = brushState;
+                }
+                drawGrid();
+            }
+        });
+
+        canvas.addEventListener("mouseup", () => {
+            isDrawing = false;
+            isErasing = false;
+        });
+
+        canvas.addEventListener("mouseleave", () => {
+            isDrawing = false;
+            isErasing = false;
+        });
+
+        canvas.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+        });
+
+        document.getElementById("downloadBtn").addEventListener("click", () => {
+		    downloadArrayAsJSFile(compile(transformInput(pixelArt)), 'TILEDATA')
+		});
+        function xgif5(coordinates, width){
+            return (coordinates[3]*width) + coordinates[2]
+        }
+        function compile(array){
+            let att=[]
+            for(let fw=0; fw<gridHeight; fw++){
+                att.push([])
+                for(let e=fw*gridWidth; e<(fw*gridWidth)+gridWidth; e++){
+                        att[fw].push(xgif5(array[e], 4))
+                    
+                }
+            }
+            return att
+        }
+        function downloadArrayAsJSFile(array, filename) {
+            const blob = new Blob(['ori'+JSON.stringify(array)], { type: 'application/javascript' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        function transformInput(input) {
+            return Object.entries(input).map(([key, value]) => {
+                return [...key.split(',').map(Number), ...value.split(',').map(Number)];
+            });
+        }
+    </script>
+</body>
+</html>
